@@ -4,9 +4,10 @@ HonkLock — Goose-Themed Message Corruption Commands
 THIS MODULE DEFINES USER COMMANDS AND HANDLERS.
 
 Commands in this module:
-- honk: Apply HonkLock to a user
-- unhonk: Remove HonkLock from a user
+- honk {user}: Apply HonkLock to a user
+- unhonk {user}: Remove HonkLock from a user
 - honk all: Apply HonkLock to all users (administrators only)
+- unhonk all: Remove HonkLock from all users (administrator only)
 - honk? {user}: Query HonkLock status
 
 Behavior:
