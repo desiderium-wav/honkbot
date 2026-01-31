@@ -1,16 +1,17 @@
 """
-Goose Brain — Core State Machine and Decision Engine
+Goose Brain — Core State Machine and Decision Authority
 
-This module defines the Goose Brain:
-a persistent internal state machine that governs honkbot's mood,
-aggression level, boredom, curiosity, and chaos propensity.
+THIS MODULE DEFINES NO COMMANDS.
+
+This module implements HonkBot’s internal state machine.
+It is the authoritative source of the goose’s “mind.”
 
 Responsibilities:
-- Maintain the goose’s current emotional/behavioral state
-- Track recent activity, stimulation, and provocation
-- Provide weighted decisions for autonomous actions
-- Expose state-based modifiers to other systems (retaliation, chaos, media)
+- Track mood, aggression, boredom, curiosity, and chaos level
+- Maintain state transitions over time
+- Expose read-only state to other systems
+- Provide weighted decision modifiers for autonomous actions
 
-The Goose Brain is authoritative.
-All autonomous behavior must consult the Goose Brain before executing.
+All autonomous systems MUST consult the Goose Brain before acting.
+No Discord API calls should occur in this module.
 """
