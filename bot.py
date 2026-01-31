@@ -1,25 +1,25 @@
 """
-honkbot — Autonomous Chaotic Goose Discord Bot
+HonkBot — Autonomous Goose-Themed Discord Bot (Main Entry Point)
 
-This file is the main entry point for honkbot.
+This file initializes and runs HonkBot.
 
-Core concept:
-honkbot is a sentient, antagonistic, goose-themed Discord bot inspired by
-Untitled Goose Game and Desktop Goose. It behaves as a semi-autonomous menace
-with its own internal state, moods, memory, and decision-making loop.
+Responsibilities of this file ONLY:
+- Create the Discord client/bot instance
+- Load configuration and environment variables
+- Import all system modules
+- Explicitly register command suites from modules
+- Start autonomous/background systems
+- Start the bot
 
-The bot can be interacted with via commands, but it also acts independently:
-- Reacts to provocation
-- Interrupts conversations
-- Deploys chat, media, and voice chat-based chaos
-- Retaliates when insulted, pinged, or discussed in chat
-- Causes unprompted mayhem
+IMPORTANT ARCHITECTURE RULES:
+- Modules do NOT self-register.
+- All command registration is explicit and occurs here.
+- All behavior logic lives in modules, not in this file.
 
-This file should ONLY:
-- Initialize the bot
-- Register cogs/modules
-- Start background tasks
-
-All actual behavior, logic, and chaos is implemented in dedicated modules.
-No feature logic should live directly in this file.
+HonkBot is a semi-autonomous, antagonistic goose-inspired bot that:
+- Responds to commands
+- Acts independently via background decision loops
+- Retaliates when provoked
+- Disrupts chat, media, and voice channels
+- Respects safety controls and administrator overrides (server owner and bot owner only)
 """
