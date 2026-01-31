@@ -1,14 +1,15 @@
 """
-Goose Memory — Internal Memory and Context Tracking
+Goose Memory — Internal Memory and Grudge Tracking
 
-This module manages honkbot’s internal memory, including:
+THIS MODULE DEFINES NO COMMANDS.
+
+This module stores and manages HonkBot’s memory, including:
 - Users who have provoked the goose
-- Recent targets and victims
-- Recently used actions (to prevent repetition)
+- Provocation history and decay
+- Recent actions taken (anti-repetition)
 - Learned context keywords and topics
-- Cooldowns and grudges
+- Temporary grudges and cooldowns
 
-Memory may be short-term (session-based) or persistent (stored to disk).
-
-This system enables the goose to appear aware, reactive, and vindictive.
+Memory supports both in-memory and persistent storage.
+This module contains logic only and performs no Discord actions.
 """
