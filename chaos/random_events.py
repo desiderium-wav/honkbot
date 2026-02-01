@@ -7,6 +7,7 @@ Responsibilities:
 - Define individual chaos events such as:
   - Random honklocks or echolocks
   - Sudden messages or pings
+  - Honkify random messages without honklocking the user
   - Media drive-bys
   - Voice channel disruptions
 - Expose callable event functions to the decision loop
