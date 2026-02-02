@@ -1,7 +1,17 @@
 """
-HonkLock — Goose-Themed Message Corruption Commands
+HonkLock — Persistent Goose-Themed Message Lock
 
 THIS MODULE DEFINES USER COMMANDS AND HANDLERS.
+
+HonkLock enforces persistent honkification on a user.
+Once locked, ALL of the user’s messages are honkified
+until unlocked by an admin or the bot itself
+
+Responsibilities:
+- Apply and remove honklocks on users
+- Intercept messages from locked users and send the honkified version via webhook
+- Delegate actual message transformation to Honkify
+- Track lock duration and escalation potential
 
 Commands in this module:
 - honk {user}: Apply HonkLock to a user
@@ -10,14 +20,9 @@ Commands in this module:
 - unhonk all: Remove HonkLock from all users (administrator only)
 - honk? {user}: Query HonkLock status
 
-Behavior:
-- Rewrites user messages by replacing nouns or key words with "honk"
-- Variants may include capitalization, repetition, or absurd phrasing
-- Deletes original messages and resends honklocked version via webhook
-- Copies honklocked user's display name and avatar to make the webhook look like it's coming from the honklocked user   
+IMPORTANT:
+- This module does NOT define honk replacement logic.
+- It relies entirely on Honkify for message transformation
 
-This module must:
-- Define command handler functions
-- Define message transformation helpers
-- Expose a `register(bot)` function for bot.py to call
+Registered explicitly via `register(bot)`.
 """
