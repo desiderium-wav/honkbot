@@ -1,17 +1,16 @@
 """
-EchoLock — Mocking Message Repetition Commands
+Echo — Mocking Message Repetition Commands
 
 THIS MODULE DEFINES USER COMMANDS AND HANDLERS.
 
 Commands in this module:
-- echo {user}: Apply EchoLock to a user
-- unecho {user}: Remove EchoLock from a user
-- echo? {user}: Query EchoLock status
+- echo {user}: Apply Echo to a user
+- unecho {user}: Remove Echo from a user
 
 Behavior:
-- Reposts user messages with exaggerated casing
+- Replies to user messages by reposting the original message with exaggerated casing
 - Adds randomized mocking commentary and emojis
-- May optionally trigger media responses via the media system
+- May also trigger media responses via the media system
 
 This module weaponizes user speech without blocking it.
 All commands are registered explicitly via `register(bot)`.
