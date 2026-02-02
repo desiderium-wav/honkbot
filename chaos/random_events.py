@@ -3,14 +3,21 @@ Random Chaos Events — Autonomous Action Definitions
 
 THIS MODULE DEFINES NO COMMANDS.
 
-Responsibilities:
-- Define individual chaos events such as:
-  - Random honklocks or echolocks
+Defines autonomous chaos events such as:
+  - Random honkify or echo on active users
   - Sudden messages or pings
-  - Honkify random messages without honklocking the user
-  - Media drive-bys
+  - Channel takeover events ("channel honkjacked"
+  - Media bursts tied to honk escalation 
   - Voice channel disruptions
-- Expose callable event functions to the decision loop
+  - Random drive-by goose interruptions in chat
+
+Takeover Event:
+- Triggered when per-channel or per-user honk count crosses a threshold
+- Posts "CHANNEL HONKJACKED"
+- Emits bursts of HONKs, emojis, and GIFs
+- Enforced per-channel cooldow
+
+Events are selected and triggered by the Chaos Decision Loop. Expose callable event functions to the decision loop.
 
 This module does not schedule itself.
 """
