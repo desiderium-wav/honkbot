@@ -39,7 +39,8 @@ _user_honk_counts: Dict[int, int] = {}
 _channel_honk_activity: Dict[int, int] = {}
 _cooldowns: Dict[Tuple[str, int], float] = {}
 _takeover_thresholds: Dict[int, int] = {}
-_recent_actions: Dict[int, List[RecentAction]] ={}
+_recent_actions: Dict[int, List[RecentAction]] = {}
+_honklocks: Dict[int, float] = {}
 
 
 def get_user_honk_count(user_id: int) -> int:
@@ -171,9 +172,37 @@ def reset_all_recent_actions() -> None:
     _recent_actions.clear()
 
 
+def set_honklock(user_id: int, locked_at: Optional[float] = None) -> float:
+    if locked_at is None:
+        locked_at = time.time()
+    _honklocks[user_id] = locked_at
+    return locked_at
+
+
+def clear_honklock(user_id: int) -> None:
+    _honklocks.pop(user_id, None)
+
+
+def is_honklocked(user_id: int) -> bool:
+    return user_id in _honklocks
+
+
+def get_honklock_time(user_id: int) -> Optional[float]:
+    return _honklocks.get(user_id)
+
+
+def get_all_honklocks() -> Dict[int, float]:
+    return dict(_honklocks)
+
+
+def reset_all_honklocks() -> None:
+    _honklocks.clear()
+
+
 def reset_all_state() -> None:
     reset_all_user_honk_counts()
     reset_all_channel_honk_activity()
     reset_all_cooldowns()
     reset_all_takeover_thresholds()
     reset_all_recent_actions()
+    reset_all_honklocks()
