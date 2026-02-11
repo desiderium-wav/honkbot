@@ -1,5 +1,4 @@
-"""
-Goose Memory — Internal Memory and Grudge Tracking
+"""Goose Memory — Internal Memory and Grudge Tracking
 
 THIS MODULE DEFINES NO COMMANDS.
 
@@ -29,11 +28,10 @@ DEFAULT_TAKEOVER_THRESHOLD = 10
 DEFAULT_RECENT_ACTION_LIMIT = 10
 
 
-dataclass(frozen=True)
+@dataclass(frozen=True)
 class RecentAction:
     action: str
     timestamp: float
-
 
 _user_honk_counts: Dict[int, int] = {}
 _channel_honk_activity: Dict[int, int] = {}
