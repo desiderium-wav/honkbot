@@ -1,5 +1,4 @@
-"""
-Media Providers — External and Internal Media Fetching
+"""Media Providers — External and Internal Media Fetching
 
 THIS MODULE DEFINES NO COMMANDS.
 
@@ -33,7 +32,7 @@ LOCAL_CATEGORIES = {"angry", "smug", "chaos", "honk", "misc"}
 HONK_DENSITY_THRESHOLD = 0.65
 
 
-@dataclass
+dataclass
 class MediaProvider:
     name: str
 
@@ -169,7 +168,8 @@ class ServerMediaProvider(MediaProvider):
         all_urls = [url for urls in guild_index.values() for url in urls]
         if not all_urls:
             return None
-        return _make_item("url", random.choice(all_urls), "server", tags=[])\n
+        return _make_item("url", random.choice(all_urls), "server", tags=[]) 
+
 
 @dataclass
 class TenorProvider(MediaProvider):
