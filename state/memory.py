@@ -22,7 +22,7 @@ This module contains logic only and performs no Discord actions.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 import time
 
 DEFAULT_TAKEOVER_THRESHOLD = 10
@@ -42,6 +42,9 @@ _takeover_thresholds: Dict[int, int] = {}
 _recent_actions: Dict[int, List[RecentAction]] = {}
 _honklocks: Dict[int, float] = {}
 _echo_locks: Dict[int, float] = {}
+
+_safety_state: Dict[int, Dict[str, Any]] = {}
+_global_safety_enabled: bool = True
 
 
 def get_user_honk_count(user_id: int) -> int:
@@ -227,6 +230,47 @@ def reset_all_echolocks() -> None:
     _echo_locks.clear()
 
 
+def _default_safety_state() -> Dict[str, Any]:
+    return {
+        "enabled": True,
+        "channel_exclusions": set(),
+        "immunity_roles": set(),
+        "module_toggles": {},
+        "cooldowns": {},
+    }
+
+
+def get_safety_state(guild_id: int) -> Dict[str, Any]:
+    state = _safety_state.get(guild_id)
+    if state is None:
+        state = _default_safety_state()
+        _safety_state[guild_id] = state
+        return state
+    state.setdefault("enabled", True)
+    state.setdefault("channel_exclusions", set())
+    state.setdefault("immunity_roles", set())
+    state.setdefault("module_toggles", {})
+    state.setdefault("cooldowns", {})
+    return state
+
+
+def reset_safety_state(guild_id: int) -> None:
+    _safety_state.pop(guild_id, None)
+
+
+def reset_all_safety_state() -> None:
+    _safety_state.clear()
+
+
+def get_global_safety_enabled() -> bool:
+    return _global_safety_enabled
+
+
+def set_global_safety_enabled(enabled: bool) -> None:
+    global _global_safety_enabled
+    _global_safety_enabled = bool(enabled)
+
+
 def reset_all_state() -> None:
     reset_all_user_honk_counts()
     reset_all_channel_honk_activity()
@@ -235,3 +279,5 @@ def reset_all_state() -> None:
     reset_all_recent_actions()
     reset_all_honklocks()
     reset_all_echolocks()
+    reset_all_safety_state()
+    set_global_safety_enabled(True)
