@@ -18,9 +18,10 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Dict, Iterable, Optional, Tuple, Union
+from typing import Dict, Optional, Union
 
 import discord
+from discord.ext import commands
 
 from state import memory
 
@@ -61,6 +62,21 @@ def _get_owner_id() -> Optional[int]:
         return int(raw)
     except ValueError:
         return None
+
+
+def _is_bot_owner(user_id: int) -> bool:
+    owner_id = _get_owner_id()
+    return owner_id is not None and user_id == owner_id
+
+
+def _has_guild_control(ctx: commands.Context) -> bool:
+    if ctx.guild is None:
+        return False
+    if _is_bot_owner(ctx.author.id):
+        return True
+    if ctx.guild.owner_id == ctx.author.id:
+        return True
+    return bool(getattr(ctx.author, "guild_permissions", None).administrator)
 
 
 def get_guild_state(guild: GuildLike) -> Dict[str, object]:
@@ -262,3 +278,131 @@ def safety_allows(
     if member and user_has_immunity(member):
         return False
     return True
+
+
+def register(bot: commands.Bot) -> None:
+    @bot.group(name="safety", invoke_without_command=True)
+    @commands.check(_has_guild_control)
+    async def safety_group(ctx: commands.Context) -> None:
+        if ctx.guild is None:
+            await ctx.reply("Safety controls are only available in a server.")
+            return
+        toggles = get_module_toggles(ctx.guild)
+        exclusions = get_guild_state(ctx.guild).get("channel_exclusions", set())
+        status_lines = [
+            f"Global enabled: {'on' if is_global_enabled() else 'off'}",
+            f"Guild enabled: {'on' if is_guild_enabled(ctx.guild) else 'off'}",
+            f"Excluded channels: {len(exclusions)}",
+            "Module toggles:",
+        ]
+        for module in SYSTEM_TOGGLES:
+            status_lines.append(f"- {module}: {'on' if toggles.get(module, True) else 'off'}")
+        await ctx.reply("\n".join(status_lines))
+
+    @safety_group.command(name="enable")
+    @commands.check(_has_guild_control)
+    async def safety_enable(ctx: commands.Context) -> None:
+        if ctx.guild is None:
+            await ctx.reply("Safety controls are only available in a server.")
+            return
+        set_guild_enabled(ctx.guild, True)
+        await ctx.reply("Safety enabled for this server.")
+
+    @safety_group.command(name="disable")
+    @commands.check(_has_guild_control)
+    async def safety_disable(ctx: commands.Context) -> None:
+        if ctx.guild is None:
+            await ctx.reply("Safety controls are only available in a server.")
+            return
+        set_guild_enabled(ctx.guild, False)
+        await ctx.reply("Safety disabled for this server.")
+
+    @safety_group.command(name="global")
+    async def safety_global(ctx: commands.Context, flag: str) -> None:
+        if not _is_bot_owner(ctx.author.id):
+            await ctx.reply("Only the bot owner can change global safety.")
+            return
+        enabled = flag.lower() in {"on", "enable", "enabled", "true", "1"}
+        if not set_global_enabled(enabled, actor_id=ctx.author.id):
+            await ctx.reply("Failed to update global safety.")
+            return
+        await ctx.reply(f"Global safety {'enabled' if enabled else 'disabled'}.")
+
+    @safety_group.command(name="module")
+    @commands.check(_has_guild_control)
+    async def safety_module(ctx: commands.Context, module: str, flag: str) -> None:
+        if ctx.guild is None:
+            await ctx.reply("Safety controls are only available in a server.")
+            return
+        module_key = module.lower()
+        if module_key not in SYSTEM_TOGGLES:
+            await ctx.reply(f"Unknown module. Valid: {', '.join(SYSTEM_TOGGLES)}")
+            return
+        enabled = flag.lower() in {"on", "enable", "enabled", "true", "1"}
+        set_module_enabled(ctx.guild, module_key, enabled)
+        await ctx.reply(f"Module {module_key} {'enabled' if enabled else 'disabled'}.")
+
+    @safety_group.group(name="exclude", invoke_without_command=True)
+    @commands.check(_has_guild_control)
+    async def safety_exclude(ctx: commands.Context) -> None:
+        await ctx.reply("Usage: safety exclude add|remove|clear")
+
+    @safety_exclude.command(name="add")
+    @commands.check(_has_guild_control)
+    async def safety_exclude_add(ctx: commands.Context, channel: discord.TextChannel) -> None:
+        add_channel_exclusion(ctx.guild, channel)
+        await ctx.reply(f"Excluded {channel.mention} from chaos actions.")
+
+    @safety_exclude.command(name="remove")
+    @commands.check(_has_guild_control)
+    async def safety_exclude_remove(ctx: commands.Context, channel: discord.TextChannel) -> None:
+        remove_channel_exclusion(ctx.guild, channel)
+        await ctx.reply(f"Removed {channel.mention} from exclusions.")
+
+    @safety_exclude.command(name="clear")
+    @commands.check(_has_guild_control)
+    async def safety_exclude_clear(ctx: commands.Context) -> None:
+        if ctx.guild is None:
+            await ctx.reply("Safety controls are only available in a server.")
+            return
+        clear_channel_exclusions(ctx.guild)
+        await ctx.reply("Cleared all channel exclusions.")
+
+    @safety_group.group(name="cooldown", invoke_without_command=True)
+    @commands.check(_has_guild_control)
+    async def safety_cooldown(ctx: commands.Context) -> None:
+        await ctx.reply("Usage: safety cooldown set|clear <key> [seconds] [#channel]")
+
+    @safety_cooldown.command(name="set")
+    @commands.check(_has_guild_control)
+    async def safety_cooldown_set(
+        ctx: commands.Context,
+        key: str,
+        seconds: float,
+        channel: Optional[discord.TextChannel] = None,
+    ) -> None:
+        if ctx.guild is None:
+            await ctx.reply("Safety controls are only available in a server.")
+            return
+        until = set_cooldown(ctx.guild, key, seconds, channel=channel)
+        remaining = max(0.0, until - time.monotonic())
+        if channel:
+            await ctx.reply(f"Cooldown set for {key} in {channel.mention} ({remaining:.1f}s).")
+        else:
+            await ctx.reply(f"Cooldown set for {key} in this server ({remaining:.1f}s).")
+
+    @safety_cooldown.command(name="clear")
+    @commands.check(_has_guild_control)
+    async def safety_cooldown_clear(
+        ctx: commands.Context,
+        key: str,
+        channel: Optional[discord.TextChannel] = None,
+    ) -> None:
+        if ctx.guild is None:
+            await ctx.reply("Safety controls are only available in a server.")
+            return
+        clear_cooldown(ctx.guild, key, channel=channel)
+        if channel:
+            await ctx.reply(f"Cooldown cleared for {key} in {channel.mention}.")
+        else:
+            await ctx.reply(f"Cooldown cleared for {key} in this server.")
