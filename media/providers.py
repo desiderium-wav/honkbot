@@ -31,7 +31,6 @@ LOCAL_MEDIA_ROOT = Path("media/goose")
 LOCAL_CATEGORIES = {"angry", "smug", "chaos", "honk", "misc"}
 HONK_DENSITY_THRESHOLD = 0.65
 
-
 @dataclass
 class MediaProvider:
     name: str
@@ -44,7 +43,6 @@ class MediaProvider:
 
     async def get_random(self, context: Dict[str, object]) -> Optional[MediaItem]:
         raise NotImplementedError
-
 
 @dataclass
 class LocalMediaProvider(MediaProvider):
@@ -129,7 +127,6 @@ class LocalMediaProvider(MediaProvider):
         tags.extend(token for token in stem.split() if token)
         return sorted(set(tags))
 
-
 @dataclass
 class ServerMediaProvider(MediaProvider):
     _index: Dict[int, Dict[str, List[str]]] = field(default_factory=dict, init=False)
@@ -168,5 +165,199 @@ class ServerMediaProvider(MediaProvider):
         all_urls = [url for urls in guild_index.values() for url in urls]
         if not all_urls:
             return None
-        return _make_item("url", random.choice(all_urls), "server", tags=[])\n
-@dataclass\nclass TenorProvider(MediaProvider):\n    api_key: Optional[str] = field(default_factory=lambda: os.getenv("TENOR_API_KEY"))\n\n    async def search(self, query: str, context: Dict[str, object]) -> Optional[MediaItem]:\n        if not self._enabled:\n            return None\n        return await self._fetch_media(query)\n\n    async def get_random(self, context: Dict[str, object]) -> Optional[MediaItem]:\n        if not self._enabled:\n            return None\n        keywords = _extract_keywords(context)\n        query = " ".join(keywords) if keywords else "goose"\n        return await self._fetch_media(query)\n\n    @property\n    def _enabled(self) -> bool:\n        return bool(self.api_key) and aiohttp is not None\n\n    async def _fetch_media(self, query: str) -> Optional[MediaItem]:\n        params = {\n            "key": self.api_key,\n            "q": query,\n            "limit": 25,\n            "media_filter": "gif",\n        }\n        data = await _get_json("https://tenor.googleapis.com/v2/search", params)\n        if not data:\n            return None\n        results = data.get("results") or []\n        random.shuffle(results)\n        for item in results:\n            media_formats = item.get("media_formats") or {}\n            for key in ("gif", "mediumgif", "tinygif"):\n                candidate = media_formats.get(key)\n                url = candidate.get("url") if candidate else None\n                if url:\n                    tags = list(item.get("tags") or [])\n                    return _make_item("url", url, "tenor", tags=tags)\n        return None\n\n\n@dataclass\nclass GiphyProvider(MediaProvider):\n    api_key: Optional[str] = field(default_factory=lambda: os.getenv("GIPHY_API_KEY"))\n\n    async def search(self, query: str, context: Dict[str, object]) -> Optional[MediaItem]:\n        if not self._enabled:\n            return None\n        return await self._fetch_media(query)\n\n    async def get_random(self, context: Dict[str, object]) -> Optional[MediaItem]:\n        if not self._enabled:\n            return None\n        keywords = _extract_keywords(context)\n        query = " ".join(keywords) if keywords else "goose"\n        return await self._fetch_media(query)\n\n    @property\n    def _enabled(self) -> bool:\n        return bool(self.api_key) and aiohttp is not None\n\n    async def _fetch_media(self, query: str) -> Optional[MediaItem]:\n        params = {\n            "api_key": self.api_key,\n            "q": query,\n            "limit": 25,\n            "rating": "pg-13",\n        }\n        data = await _get_json("https://api.giphy.com/v1/gifs/search", params)\n        if not data:\n            return None\n        results = data.get("data") or []\n        random.shuffle(results)\n        for item in results:\n            images = item.get("images") or {}\n            for key in ("original", "downsized", "fixed_height"):\n                candidate = images.get(key)\n                url = candidate.get("url") if candidate else None\n                if url:\n                    tags = [tag for tag in item.get("tags") or []]\n                    return _make_item("url", url, "giphy", tags=tags)\n        return None\n\n\n@dataclass\nclass MediaProviderHub:\n    local: LocalMediaProvider = field(default_factory=lambda: LocalMediaProvider(name="local"))\n    server: ServerMediaProvider = field(default_factory=lambda: ServerMediaProvider(name="server"))\n    tenor: TenorProvider = field(default_factory=lambda: TenorProvider(name="tenor"))\n    giphy: GiphyProvider = field(default_factory=lambda: GiphyProvider(name="giphy"))\n\n    async def initialize(self) -> None:\n        await self.local.initialize()\n        await self.server.initialize()\n        await self.tenor.initialize()\n        await self.giphy.initialize()\n\n    async def search(self, query: str, context: Optional[Dict[str, object]] = None) -> Optional[MediaItem]:\n        context = context or {}\n        provider_chain = self._choose_providers(context, prefer_query=True)\n        for provider in provider_chain:\n            result = await provider.search(query, context)\n            if result:\n                return result\n        return None\n\n    async def get_random(self, context: Optional[Dict[str, object]] = None) -> Optional[MediaItem]:\n        context = context or {}\n        provider_chain = self._choose_providers(context, prefer_query=False)\n        for provider in provider_chain:\n            result = await provider.get_random(context)\n            if result:\n                return result\n        return None\n\n    def add_server_media(self, guild_id: int, keywords: Iterable[str], urls: Iterable[str]) -> None:\n        self.server.add_media(guild_id, keywords, urls)\n\n    def _choose_providers(self, context: Dict[str, object], *, prefer_query: bool) -> List[MediaProvider]:\n        keywords = _extract_keywords(context)\n        if context.get("takeover"):\n            return _provider_chain([self.tenor, self.giphy, self.local, self.server])\n\n        honk_density = float(context.get("honk_density", 0.0) or 0.0)\n        if honk_density >= HONK_DENSITY_THRESHOLD:\n            context.setdefault("preferred_categories", ["chaos", "angry"])\n            return _provider_chain([self.local, self.tenor, self.giphy, self.server])\n\n        if self.local.has_keyword_match(keywords):\n            return _provider_chain([self.local, self.server, self.tenor, self.giphy])\n\n        weights = [\n            (self.local, 0.4),\n            (self.tenor, 0.4),\n            (self.giphy, 0.2),\n        ]\n        selection = _weighted_choice(weights)\n        return _provider_chain([selection, self.server, self.local, self.tenor, self.giphy])\n\n\nasync def _get_json(url: str, params: Dict[str, object]) -> Optional[Dict[str, object]]:\n    if aiohttp is None:\n        return None\n    try:\n        async with aiohttp.ClientSession() as session:\n            async with session.get(url, params=params, timeout=10) as response:\n                if response.status != 200:\n                    return None\n                return await response.json()\n    except (aiohttp.ClientError, ValueError, TimeoutError):\n        return None\n\n\ndef _extract_keywords(context: Dict[str, object], *, query: Optional[str] = None) -> List[str]:\n    keywords: List[str] = []\n    for value in context.get("keywords", []) if context else []:\n        if isinstance(value, str) and value:\n            keywords.append(value)\n    if query:\n        keywords.extend(token for token in query.split() if token)\n    return keywords\n\n\ndef _weighted_choice(weighted: Sequence[tuple[MediaProvider, float]]) -> MediaProvider:\n    total = sum(weight for _, weight in weighted)\n    if total <= 0:\n        return weighted[0][0]\n    roll = random.random() * total\n    upto = 0.0\n    for provider, weight in weighted:\n        upto += weight\n        if roll <= upto:\n            return provider\n    return weighted[-1][0]\n\n\ndef _provider_chain(candidates: Sequence[MediaProvider]) -> List[MediaProvider]:\n    seen = set()\n    ordered = []\n    for provider in candidates:\n        if provider.name in seen:\n            continue\n        seen.add(provider.name)\n        ordered.append(provider)\n    return ordered\n\n\ndef _make_item(item_type: str, value: str, source: str, *, tags: Sequence[str]) -> MediaItem:\n    return {\n        "type": item_type,\n        "value": value,\n        "source": source,\n        "tags": list(tags),\n    }
+        return _make_item("url", random.choice(all_urls), "server", tags=[]) 
+
+@dataclass
+class TenorProvider(MediaProvider):
+    api_key: Optional[str] = field(default_factory=lambda: os.getenv("TENOR_API_KEY"))
+
+    async def search(self, query: str, context: Dict[str, object]) -> Optional[MediaItem]:
+        if not self._enabled:
+            return None
+        return await self._fetch_media(query)
+
+    async def get_random(self, context: Dict[str, object]) -> Optional[MediaItem]:
+        if not self._enabled:
+            return None
+        keywords = _extract_keywords(context)
+        query = " ".join(keywords) if keywords else "goose"
+        return await self._fetch_media(query)
+
+    @property
+    def _enabled(self) -> bool:
+        return bool(self.api_key) and aiohttp is not None
+
+    async def _fetch_media(self, query: str) -> Optional[MediaItem]:
+        params = {
+            "key": self.api_key,
+            "q": query,
+            "limit": 25,
+            "media_filter": "gif",
+        }
+        data = await _get_json("https://tenor.googleapis.com/v2/search", params)
+        if not data:
+            return None
+        results = data.get("results") or []
+        random.shuffle(results)
+        for item in results:
+            media_formats = item.get("media_formats") or {}
+            for key in ("gif", "mediumgif", "tinygif"):
+                candidate = media_formats.get(key)
+                url = candidate.get("url") if candidate else None
+                if url:
+                    tags = list(item.get("tags") or [])
+                    return _make_item("url", url, "tenor", tags=tags)
+        return None
+
+@dataclass
+class GiphyProvider(MediaProvider):
+    api_key: Optional[str] = field(default_factory=lambda: os.getenv("GIPHY_API_KEY"))
+
+    async def search(self, query: str, context: Dict[str, object]) -> Optional[MediaItem]:
+        if not self._enabled:
+            return None
+        return await self._fetch_media(query)
+
+    async def get_random(self, context: Dict[str, object]) -> Optional[MediaItem]:
+        if not self._enabled:
+            return None
+        keywords = _extract_keywords(context)
+        query = " ".join(keywords) if keywords else "goose"
+        return await self._fetch_media(query)
+
+    @property
+    def _enabled(self) -> bool:
+        return bool(self.api_key) and aiohttp is not None
+
+    async def _fetch_media(self, query: str) -> Optional[MediaItem]:
+        params = {
+            "api_key": self.api_key,
+            "q": query,
+            "limit": 25,
+            "rating": "pg-13",
+        }
+        data = await _get_json("https://api.giphy.com/v1/gifs/search", params)
+        if not data:
+            return None
+        results = data.get("data") or []
+        random.shuffle(results)
+        for item in results:
+            images = item.get("images") or {}
+            for key in ("original", "downsized", "fixed_height"):
+                candidate = images.get(key)
+                url = candidate.get("url") if candidate else None
+                if url:
+                    tags = [tag for tag in item.get("tags") or []]
+                    return _make_item("url", url, "giphy", tags=tags)
+        return None
+
+@dataclass
+class MediaProviderHub:
+    local: LocalMediaProvider = field(default_factory=lambda: LocalMediaProvider(name="local"))
+    server: ServerMediaProvider = field(default_factory=lambda: ServerMediaProvider(name="server"))
+    tenor: TenorProvider = field(default_factory=lambda: TenorProvider(name="tenor"))
+    giphy: GiphyProvider = field(default_factory=lambda: GiphyProvider(name="giphy"))
+
+    async def initialize(self) -> None:
+        await self.local.initialize()
+        await self.server.initialize()
+        await self.tenor.initialize()
+        await self.giphy.initialize()
+
+    async def search(self, query: str, context: Optional[Dict[str, object]] = None) -> Optional[MediaItem]:
+        context = context or {}
+        provider_chain = self._choose_providers(context, prefer_query=True)
+        for provider in provider_chain:
+            result = await provider.search(query, context)
+            if result:
+                return result
+        return None
+
+    async def get_random(self, context: Optional[Dict[str, object]] = None) -> Optional[MediaItem]:
+        context = context or {}
+        provider_chain = self._choose_providers(context, prefer_query=False)
+        for provider in provider_chain:
+            result = await provider.get_random(context)
+            if result:
+                return result
+        return None
+
+    def add_server_media(self, guild_id: int, keywords: Iterable[str], urls: Iterable[str]) -> None:
+        self.server.add_media(guild_id, keywords, urls)
+
+    def _choose_providers(self, context: Dict[str, object], *, prefer_query: bool) -> List[MediaProvider]:
+        keywords = _extract_keywords(context)
+        if context.get("takeover"):
+            return _provider_chain([self.tenor, self.giphy, self.local, self.server])
+
+        honk_density = float(context.get("honk_density", 0.0) or 0.0)
+        if honk_density >= HONK_DENSITY_THRESHOLD:
+            context.setdefault("preferred_categories", ["chaos", "angry"])
+            return _provider_chain([self.local, self.tenor, self.giphy, self.server])
+
+        if self.local.has_keyword_match(keywords):
+            return _provider_chain([self.local, self.server, self.tenor, self.giphy])
+
+        weights = [
+            (self.local, 0.4),
+            (self.tenor, 0.4),
+            (self.giphy, 0.2),
+        ]
+        selection = _weighted_choice(weights)
+        return _provider_chain([selection, self.server, self.local, self.tenor, self.giphy])
+
+
+async def _get_json(url: str, params: Dict[str, object]) -> Optional[Dict[str, object]]:
+    if aiohttp is None:
+        return None
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params, timeout=10) as response:
+                if response.status != 200:
+                    return None
+                return await response.json()
+    except (aiohttp.ClientError, ValueError, TimeoutError):
+        return None
+
+
+def _extract_keywords(context: Dict[str, object], *, query: Optional[str] = None) -> List[str]:
+    keywords: List[str] = []
+    for value in context.get("keywords", []) if context else []:
+        if isinstance(value, str) and value:
+            keywords.append(value)
+    if query:
+        keywords.extend(token for token in query.split() if token)
+    return keywords
+
+
+def _weighted_choice(weighted: Sequence[tuple[MediaProvider, float]]) -> MediaProvider:
+    total = sum(weight for _, weight in weighted)
+    if total <= 0:
+        return weighted[0][0]
+    roll = random.random() * total
+    upto = 0.0
+    for provider, weight in weighted:
+        upto += weight
+        if roll <= upto:
+            return provider
+    return weighted[-1][0]
+
+
+def _provider_chain(candidates: Sequence[MediaProvider]) -> List[MediaProvider]:
+    seen = set()
+    ordered = []
+    for provider in candidates:
+        if provider.name in seen:
+            continue
+        seen.add(provider.name)
+        ordered.append(provider)
+    return ordered
+
+
+def _make_item(item_type: str, value: str, source: str, *, tags: Sequence[str]) -> MediaItem:
+    return {
+        "type": item_type,
+        "value": value,
+        "source": source,
+        "tags": list(tags),
+    }
