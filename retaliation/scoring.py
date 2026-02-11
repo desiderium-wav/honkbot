@@ -14,7 +14,7 @@ It does not decide punishments or execute actions.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Iterable, Optional, Sequence
 
@@ -22,13 +22,11 @@ from typing import Iterable, Optional, Sequence
 # ---------------------------
 # Configuration & thresholds
 # ---------------------------
-
 @dataclass(frozen=True)
 class Thresholds:
     warn: float = 6.0
     retaliate: float = 12.0
     severe: float = 18.0
-
 
 @dataclass(frozen=True)
 class ScoringConfig:
@@ -57,7 +55,6 @@ class ScoringConfig:
 # ---------------------------
 # Data models
 # ---------------------------
-
 @dataclass(frozen=True)
 class MessageEvent:
     """
@@ -68,8 +65,7 @@ class MessageEvent:
     mentions: Sequence[str]
     mention_everyone: bool = False
     mention_role: bool = False
-    created_at: datetime = datetime.now(timezone.utc)
-
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 @dataclass(frozen=True)
 class HistorySample:
@@ -84,7 +80,6 @@ class HistorySample:
 # ---------------------------
 # Lexical heuristics
 # ---------------------------
-
 _INSULT_KEYWORDS = {
     "idiot", "moron", "stupid", "dumb", "loser", "trash", "garbage",
     "clown", "pathetic", "worthless", "useless", "shut up", "shutup",
@@ -102,7 +97,6 @@ _THREATS = {
 # ---------------------------
 # Public API
 # ---------------------------
-
 def score_message(
     message: MessageEvent,
     history: Optional[Iterable[HistorySample]] = None,
@@ -124,7 +118,6 @@ def score_message(
 
     return max(0.0, base)
 
-
 def apply_decay(
     score: float,
     last_updated: datetime,
@@ -141,13 +134,11 @@ def apply_decay(
     decay_factor = 0.5 ** (elapsed / config.half_life_seconds)
     return score * decay_factor
 
-
 def meets_threshold(score: float, config: ScoringConfig = ScoringConfig()) -> bool:
     """
     True if score indicates retaliation eligibility.
     """
     return score >= config.thresholds.retaliate
-
 
 def threshold_level(score: float, config: ScoringConfig = ScoringConfig()) -> str:
     """
@@ -165,7 +156,6 @@ def threshold_level(score: float, config: ScoringConfig = ScoringConfig()) -> st
 # ---------------------------
 # Internal scoring helpers
 # ---------------------------
-
 def _score_content(content: str, config: ScoringConfig) -> float:
     text = content.lower()
     score = 0.0
@@ -201,6 +191,7 @@ def _score_repetition(
     """
     Penalize repeated content or repeated mentions in a short window.
     """
+    """
     if not history:
         return 0.0
 
@@ -225,6 +216,7 @@ def _score_escalation(
 ) -> float:
     """
     Detect rapid-fire insults or intensifying language over short intervals.
+    """
     """
     if not history:
         return 0.0
