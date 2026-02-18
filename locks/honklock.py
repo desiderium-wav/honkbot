@@ -1,5 +1,5 @@
 """
-HonkLock — Persistent Goose-Themed Message Lock
+HonkLock — Persistent Goose-Themed Message Lock (updated for slash-friendly names)
 
 THIS MODULE DEFINES USER COMMANDS AND HANDLERS.
 
@@ -18,11 +18,8 @@ Commands in this module:
 - unhonk {user}: Remove HonkLock from a user
 - honk all: Apply HonkLock to all users (administrators only)
 - unhonk all: Remove HonkLock from all users (administrator only)
-- honk? {user}: Query HonkLock status
-
-IMPORTANT:
-- This module does NOT define honk replacement logic.
-- It relies entirely on Honkify for message transformation
+- honk? (legacy prefix-only alias) — preserved for backwards compatibility
+- honk_status (hybrid slash-capable command) — slash-friendly replacement for `honk?`
 
 Registered explicitly via `register(bot)`.
 """
@@ -91,13 +88,10 @@ async def _emit_honkified(message: discord.Message, content: str) -> None:
 
 
 def register(bot: commands.Bot) -> None:
+    # Admin: honk (apply honklock)
     @commands.hybrid_command(name="honk")
     @commands.has_permissions(administrator=True)
-    async def honk_cmd(
-        ctx: commands.Context,
-        member: Optional[discord.Member] = None,
-        all_users: bool = False,
-    ) -> None:
+    async def honk_cmd(ctx: commands.Context, member: Optional[discord.Member] = None, all_users: bool = False) -> None:
         """Apply HonkLock to a member or everyone when all_users is True."""
         if all_users:
             if not ctx.guild:
@@ -123,13 +117,10 @@ def register(bot: commands.Bot) -> None:
         memory.set_honklock(member.id)
         await ctx.reply(f"{member.display_name} is now honklocked.")
 
+    # Admin: unhonk (remove honklock)
     @commands.hybrid_command(name="unhonk")
     @commands.has_permissions(administrator=True)
-    async def unhonk_cmd(
-        ctx: commands.Context,
-        member: Optional[discord.Member] = None,
-        all_users: bool = False,
-    ) -> None:
+    async def unhonk_cmd(ctx: commands.Context, member: Optional[discord.Member] = None, all_users: bool = False) -> None:
         """Remove HonkLock from a member or everyone."""
         if all_users:
             memory.reset_all_honklocks()
@@ -146,13 +137,11 @@ def register(bot: commands.Bot) -> None:
         memory.clear_honklock(member.id)
         await ctx.reply(f"{member.display_name} has been unhonked.")
 
-    @commands.hybrid_command(name="honk?")
-    async def honk_status_cmd(
-        ctx: commands.Context,
-        member: Optional[discord.Member] = None,
-        all_users: bool = False,
-    ) -> None:
-        """Query honklock status for a member or list honklocked users."""
+    # Hybrid slash-friendly status command (valid app command name)
+    @commands.hybrid_command(name="honk_status")
+    async def honk_status_cmd(ctx: commands.Context, member: Optional[discord.Member] = None, all_users: bool = False) -> None:
+        """Query honklock status for a member or list honklocked users.
+        This is the slash-friendly variant (app name 'honk_status')."""
         if all_users:
             locked = memory.get_all_honklocks()
             if not locked:
@@ -165,6 +154,32 @@ def register(bot: commands.Bot) -> None:
         target = member or ctx.author
         await ctx.reply(_format_lock_status(target))
 
+    # Legacy prefix-only alias to preserve the original "honk?" command name.
+    # This keeps compatibility for users who invoke "honk?" via prefix.
+    @bot.command(name="honk?")
+    async def honk_question_alias(ctx: commands.Context, *, target: Optional[str] = None) -> None:
+        """Legacy prefix-only alias for honk status (keeps `honk?` working)."""
+        # If no target provided, show invoker status
+        if not target:
+            await ctx.reply(_format_lock_status(ctx.author))
+            return
+
+        if target.lower() == "all":
+            locked = memory.get_all_honklocks()
+            if not locked:
+                await ctx.reply("No users are honklocked.")
+                return
+            mentions = ", ".join(f"<@{user_id}>" for user_id in locked.keys())
+            await ctx.reply(f"Honklocked users: {mentions}")
+            return
+
+        member = await _resolve_member(ctx, target)
+        if not member:
+            await ctx.reply("Could not resolve that user.")
+            return
+        await ctx.reply(_format_lock_status(member))
+
+    # Listener to apply honkify for honklocked users
     @bot.listen("on_message")
     async def honklock_listener(message: discord.Message) -> None:
         if honkify._should_ignore_message(message, bot):
