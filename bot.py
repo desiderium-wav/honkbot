@@ -53,7 +53,8 @@ def _build_intents() -> discord.Intents:
 
 def _build_bot() -> commands.Bot:
     intents = _build_intents()
-    return commands.Bot(command_prefix="~", intents=intents)
+    # Updated prefix from "~" to "-" per request
+    return commands.Bot(command_prefix="-", intents=intents)
 
 
 def _register_modules(bot: commands.Bot) -> None:
