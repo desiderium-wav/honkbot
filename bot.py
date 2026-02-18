@@ -37,11 +37,12 @@ from chaos import decision_loop
 from locks import echolock, honkify, honklock
 from media import actions as media_actions
 from safety import controls as safety_controls
-
+from db import get_connection
 
 LOG_LEVEL = os.getenv("HONKBOT_LOG_LEVEL", "INFO").upper()
 logging.basicConfig(level=LOG_LEVEL)
 logger = logging.getLogger("honkbot")
+db_conn = None
 
 
 def _build_intents() -> discord.Intents:
@@ -79,6 +80,12 @@ def main() -> None:
 
     @bot.event
     async def on_ready() -> None:
+        global db_conn
+
+        if db_conn is None:
+            db_conn = get_connection()
+            logger.info("Connected to the database.")
+            
         logger.info("HonkBot connected as %s", bot.user)
         await _start_background_systems(bot)
         try:
