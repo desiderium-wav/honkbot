@@ -91,65 +91,69 @@ async def _emit_honkified(message: discord.Message, content: str) -> None:
 
 
 def register(bot: commands.Bot) -> None:
-    @bot.command(name="honk")
+    @commands.hybrid_command(name="honk")
     @commands.has_permissions(administrator=True)
-    async def honk_cmd(ctx: commands.Context, *, target: Optional[str] = None) -> None:
-        if not target:
-            await ctx.reply("Specify a user or `all`.")
-            return
-
-        if target.lower() == "all":
+    async def honk_cmd(
+        ctx: commands.Context,
+        member: Optional[discord.Member] = None,
+        all_users: bool = False,
+    ) -> None:
+        """Apply HonkLock to a member or everyone when all_users is True."""
+        if all_users:
             if not ctx.guild:
                 await ctx.reply("This command requires a server context.")
                 return
             count = 0
-            for member in ctx.guild.members:
-                if member.bot:
+            for m in ctx.guild.members:
+                if m.bot:
                     continue
-                if not memory.is_honklocked(member.id):
-                    memory.set_honklock(member.id)
+                if not memory.is_honklocked(m.id):
+                    memory.set_honklock(m.id)
                     count += 1
             await ctx.reply(f"Honklocked {count} users.")
             return
 
-        member = await _resolve_member(ctx, target)
-        if not member:
-            await ctx.reply("Could not resolve that user.")
+        if member is None:
+            await ctx.reply("Specify a user or use the `all_users` flag.")
             return
+
         if memory.is_honklocked(member.id):
             await ctx.reply(f"{member.display_name} is already honklocked.")
             return
         memory.set_honklock(member.id)
         await ctx.reply(f"{member.display_name} is now honklocked.")
 
-    @bot.command(name="unhonk")
+    @commands.hybrid_command(name="unhonk")
     @commands.has_permissions(administrator=True)
-    async def unhonk_cmd(ctx: commands.Context, *, target: Optional[str] = None) -> None:
-        if not target:
-            await ctx.reply("Specify a user or `all`.")
-            return
-
-        if target.lower() == "all":
+    async def unhonk_cmd(
+        ctx: commands.Context,
+        member: Optional[discord.Member] = None,
+        all_users: bool = False,
+    ) -> None:
+        """Remove HonkLock from a member or everyone."""
+        if all_users:
             memory.reset_all_honklocks()
             await ctx.reply("All honklocks removed.")
             return
 
-        member = await _resolve_member(ctx, target)
-        if not member:
-            await ctx.reply("Could not resolve that user.")
+        if member is None:
+            await ctx.reply("Specify a user or use the `all_users` flag.")
             return
+
         if not memory.is_honklocked(member.id):
             await ctx.reply(f"{member.display_name} is not honklocked.")
             return
         memory.clear_honklock(member.id)
         await ctx.reply(f"{member.display_name} has been unhonked.")
 
-    @bot.command(name="honk?")
-    async def honk_status_cmd(ctx: commands.Context, *, target: Optional[str] = None) -> None:
-        if not target:
-            await ctx.reply(_format_lock_status(ctx.author))
-            return
-        if target.lower() == "all":
+    @commands.hybrid_command(name="honk?")
+    async def honk_status_cmd(
+        ctx: commands.Context,
+        member: Optional[discord.Member] = None,
+        all_users: bool = False,
+    ) -> None:
+        """Query honklock status for a member or list honklocked users."""
+        if all_users:
             locked = memory.get_all_honklocks()
             if not locked:
                 await ctx.reply("No users are honklocked.")
@@ -157,11 +161,9 @@ def register(bot: commands.Bot) -> None:
             mentions = ", ".join(f"<@{user_id}>" for user_id in locked.keys())
             await ctx.reply(f"Honklocked users: {mentions}")
             return
-        member = await _resolve_member(ctx, target)
-        if not member:
-            await ctx.reply("Could not resolve that user.")
-            return
-        await ctx.reply(_format_lock_status(member))
+
+        target = member or ctx.author
+        await ctx.reply(_format_lock_status(target))
 
     @bot.listen("on_message")
     async def honklock_listener(message: discord.Message) -> None:
