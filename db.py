@@ -2,17 +2,18 @@
 Database bootstrap / connection helper.
 
 This file attempts to initialize the Oracle "thick" client if available,
-but will now gracefully fall back to the python-oracledb "thin" mode if
-thick client initialization fails (DPI-1047).  The get_connection()
-helper attempts to open a database connection if DB_DSN (or DB_USER/DB_PASSWORD)
-are provided in the environment; otherwise it returns None.
+but will gracefully fall back to the python-oracledb "thin" mode if
+thick client initialization fails (DPI-1047).
 
+get_connection now accepts retry parameters to match callers such as
+db_layer.get_db_connection(retries=...).
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import time
 from typing import Optional
 
 try:
@@ -36,10 +37,7 @@ if oracledb is not None:
             oracledb.init_oracle_client(config_dir=TNS_ADMIN)
             logger.info("Initialized Oracle thick client using TNS_ADMIN=%s", TNS_ADMIN)
         else:
-            # Attempting init_oracle_client without args may raise DPI-1047 if no client is present;
-            # we avoid calling it when TNS_ADMIN is not set to reduce spurious errors.
-            # This means we'll continue in thin mode (default) unless the environment explicitly
-            # requests thick initialization.
+            # Avoid calling init_oracle_client without clear need (reduces DPI-1047 noise).
             logger.debug("TNS_ADMIN not set; skipping explicit oracledb.init_oracle_client() - using thin mode by default.")
     except Exception as e:
         # DPI-1047 or other init errors are caught here — continue in thin mode.
@@ -53,16 +51,22 @@ else:
     logger.warning("python-oracledb is not installed; database helper functions will be limited.")
 
 
-def get_connection() -> Optional["oracledb.Connection"]:
+def get_connection(retries: int = 1, retry_delay: float = 2.0) -> Optional["oracledb.Connection"]:
     """
     Return a DB connection or None.
 
+    Parameters:
+      - retries: number of attempts (>=1). If >1, the function will retry on failure.
+      - retry_delay: seconds to wait between attempts.
+
     Environment variables expected (common patterns):
-      - DB_DSN : DSN string (e.g. 'host:port/service_name' or TNS name)
+      - DB_DSN : DSN string (e.g. 'host:port/service_name' or TNS alias)
       - DB_USER
       - DB_PASSWORD
 
-    If DB_DSN is not set, this returns None (no DB configured).
+    Returns:
+      - oracledb.Connection on success
+      - None if oracledb not installed, DB_DSN not set, credentials missing, or connection failed
     """
     if oracledb is None:
         logger.debug("oracledb module not available; get_connection returning None")
@@ -76,12 +80,29 @@ def get_connection() -> Optional["oracledb.Connection"]:
         logger.info("DB_DSN not set; skipping database connection.")
         return None
 
-    try:
-        # python-oracledb uses thin mode by default. If thick client init succeeded above,
-        # this will use thick behavior where appropriate.
-        conn = oracledb.connect(user=user, password=password, dsn=dsn)
-        logger.info("Successfully connected to Oracle DB (DSN=%s).", dsn)
-        return conn
-    except Exception as e:
-        logger.exception("Failed to connect to Oracle DB (DSN=%s): %s", dsn, e)
+    # If credentials are not provided, avoid calling oracledb.connect without them,
+    # which results in DPY-4001: no credentials specified. If you use external auth
+    # (OS authentication / wallet), set DB_USER/DB_PASSWORD appropriately or adapt this code.
+    if not user or not password:
+        logger.warning(
+            "DB_USER or DB_PASSWORD not set (DB_DSN=%s). "
+            "Not attempting DB connection. Set DB_USER/DB_PASSWORD in environment if a DB is required.",
+            dsn,
+        )
         return None
+
+    attempt = 0
+    last_exc: Optional[Exception] = None
+    while attempt < max(1, int(retries)):
+        attempt += 1
+        try:
+            conn = oracledb.connect(user=user, password=password, dsn=dsn)
+            logger.info("Successfully connected to Oracle DB (DSN=%s).", dsn)
+            return conn
+        except Exception as e:
+            last_exc = e
+            logger.error("Failed to connect to Oracle DB (DSN=%s) on attempt %d/%d: %s", dsn, attempt, retries, e)
+            if attempt < retries:
+                time.sleep(retry_delay)
+    logger.exception("All attempts to connect to Oracle DB failed (DSN=%s). Last error: %s", dsn, last_exc)
+    return None
