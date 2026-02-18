@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Dict, Optional, Union
+from typing import Dict, Optional, Union, Literal
 
 import discord
 from discord.ext import commands
@@ -281,7 +281,7 @@ def safety_allows(
 
 
 def register(bot: commands.Bot) -> None:
-    @bot.group(name="safety", invoke_without_command=True)
+    @commands.hybrid_group(name="safety", invoke_without_command=True)
     @commands.check(_has_guild_control)
     async def safety_group(ctx: commands.Context) -> None:
         if ctx.guild is None:
@@ -318,11 +318,11 @@ def register(bot: commands.Bot) -> None:
         await ctx.reply("Safety disabled for this server.")
 
     @safety_group.command(name="global")
-    async def safety_global(ctx: commands.Context, flag: str) -> None:
+    async def safety_global(ctx: commands.Context, enabled: bool) -> None:
+        """Set global safety enabled/disabled. (bot owner only)"""
         if not _is_bot_owner(ctx.author.id):
             await ctx.reply("Only the bot owner can change global safety.")
             return
-        enabled = flag.lower() in {"on", "enable", "enabled", "true", "1"}
         if not set_global_enabled(enabled, actor_id=ctx.author.id):
             await ctx.reply("Failed to update global safety.")
             return
@@ -330,7 +330,7 @@ def register(bot: commands.Bot) -> None:
 
     @safety_group.command(name="module")
     @commands.check(_has_guild_control)
-    async def safety_module(ctx: commands.Context, module: str, flag: str) -> None:
+    async def safety_module(ctx: commands.Context, module: str, enabled: bool) -> None:
         if ctx.guild is None:
             await ctx.reply("Safety controls are only available in a server.")
             return
@@ -338,7 +338,6 @@ def register(bot: commands.Bot) -> None:
         if module_key not in SYSTEM_TOGGLES:
             await ctx.reply(f"Unknown module. Valid: {', '.join(SYSTEM_TOGGLES)}")
             return
-        enabled = flag.lower() in {"on", "enable", "enabled", "true", "1"}
         set_module_enabled(ctx.guild, module_key, enabled)
         await ctx.reply(f"Module {module_key} {'enabled' if enabled else 'disabled'}.")
 
