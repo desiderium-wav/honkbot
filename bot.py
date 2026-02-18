@@ -73,30 +73,42 @@ async def _initialize_persistence() -> None:
         from media import context_persistence
         from media.context import context_analyzer
         from retaliation import engine as retaliation_engine
-        
+
         # Initialize schema
         logger.info("Initializing database schema...")
         db_layer.initialize_schema()
-        
+
         # Load persisted state
         logger.info("Loading persisted state...")
         state_persistence.load_all_state()
-        
+
         logger.info("Loading context state...")
         context_persistence.load_context_state(context_analyzer)
-        
+
         logger.info("Initializing retaliation engine...")
         retaliation_engine.initialize()
-        
+
         logger.info("Persistence initialization complete")
     except Exception as e:
         logger.error(f"Error initializing persistence: {e}", exc_info=True)
 
 
 async def _start_background_systems(bot: commands.Bot) -> None:
+    """
+    Start autonomous background systems.
+
+    - Decision loop always starts.
+    - Persistence tasks only start if a DB connection exists.
+    """
     from utils import persistence_tasks
+
     await decision_loop.start(bot)
-    await persistence_tasks.start()
+
+    global db_conn
+    if db_conn:
+        await persistence_tasks.start()
+    else:
+        logger.info("Skipping persistence tasks because no DB connection is available.")
 
 
 def main() -> None:
@@ -127,7 +139,7 @@ def main() -> None:
             await _initialize_persistence()
         else:
             logger.info("Skipping persistence initialization due to missing DB connection.")
-            
+
         logger.info("HonkBot connected as %s", bot.user)
         await _start_background_systems(bot)
         try:
