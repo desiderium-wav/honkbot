@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Dict, Optional, Union, Iterable
+from typing import Dict, Optional, Union
 
 import discord
 from discord.ext import commands
@@ -87,11 +87,9 @@ async def _has_guild_control_interaction(interaction: discord.Interaction) -> bo
         return True
     if interaction.guild.owner_id == uid:
         return True
-    # interaction.user in guild is a Member with permissions
     member = interaction.user
     if isinstance(member, discord.Member) and getattr(member, "guild_permissions", None):
         return bool(member.guild_permissions.administrator)
-    # Fallback: attempt to fetch member
     try:
         member = await interaction.guild.fetch_member(uid)
         return bool(member.guild_permissions.administrator)
@@ -313,7 +311,6 @@ def _parse_bool_flag(value) -> Optional[bool]:
         return value
     if value is None:
         return None
-    # Some command parameter parsing may pass numbers; handle them.
     if isinstance(value, (int, float)):
         try:
             return bool(int(value))
@@ -540,12 +537,10 @@ def register(bot: commands.Bot) -> None:
         set_module_enabled(interaction.guild, module_key, enabled)
         await interaction.response.send_message(f"Module {module_key} {'enabled' if enabled else 'disabled'}.")
 
-    @safety_app.group(name="exclude", description="Manage excluded channels for safety")
-    async def app_safety_exclude_group(interaction: discord.Interaction) -> None:
-        # group placeholder (slash UI)
-        pass
+    # create exclude subgroup and register commands on it
+    exclude_group = app_commands.Group(name="exclude", description="Manage excluded channels for safety")
 
-    @app_safety_exclude_group.command(name="add")
+    @exclude_group.command(name="add")
     async def app_safety_exclude_add(interaction: discord.Interaction, channel: discord.TextChannel) -> None:
         if not await _has_guild_control_interaction(interaction):
             await interaction.response.send_message("You do not have permission to perform this action.", ephemeral=True)
@@ -553,7 +548,7 @@ def register(bot: commands.Bot) -> None:
         add_channel_exclusion(interaction.guild, channel)
         await interaction.response.send_message(f"Excluded {channel.mention} from chaos actions.")
 
-    @app_safety_exclude_group.command(name="remove")
+    @exclude_group.command(name="remove")
     async def app_safety_exclude_remove(interaction: discord.Interaction, channel: discord.TextChannel) -> None:
         if not await _has_guild_control_interaction(interaction):
             await interaction.response.send_message("You do not have permission to perform this action.", ephemeral=True)
@@ -561,7 +556,7 @@ def register(bot: commands.Bot) -> None:
         remove_channel_exclusion(interaction.guild, channel)
         await interaction.response.send_message(f"Removed {channel.mention} from exclusions.")
 
-    @app_safety_exclude_group.command(name="clear")
+    @exclude_group.command(name="clear")
     async def app_safety_exclude_clear(interaction: discord.Interaction) -> None:
         if not await _has_guild_control_interaction(interaction):
             await interaction.response.send_message("You do not have permission to perform this action.", ephemeral=True)
@@ -569,12 +564,12 @@ def register(bot: commands.Bot) -> None:
         clear_channel_exclusions(interaction.guild)
         await interaction.response.send_message("Cleared all channel exclusions.")
 
-    @safety_app.group(name="cooldown", description="Manage safety cooldowns")
-    async def app_safety_cooldown_group(interaction: discord.Interaction) -> None:
-        # group placeholder
-        pass
+    safety_app.add_command(exclude_group)
 
-    @app_safety_cooldown_group.command(name="set")
+    # create cooldown subgroup and register commands on it
+    cooldown_group = app_commands.Group(name="cooldown", description="Manage safety cooldowns")
+
+    @cooldown_group.command(name="set")
     async def app_safety_cooldown_set(
         interaction: discord.Interaction,
         key: str,
@@ -591,7 +586,7 @@ def register(bot: commands.Bot) -> None:
         else:
             await interaction.response.send_message(f"Cooldown set for {key} in this server ({remaining:.1f}s).")
 
-    @app_safety_cooldown_group.command(name="clear")
+    @cooldown_group.command(name="clear")
     async def app_safety_cooldown_clear(
         interaction: discord.Interaction,
         key: str,
@@ -605,6 +600,8 @@ def register(bot: commands.Bot) -> None:
             await interaction.response.send_message(f"Cooldown cleared for {key} in {channel.mention}.")
         else:
             await interaction.response.send_message(f"Cooldown cleared for {key} in this server.")
+
+    safety_app.add_command(cooldown_group)
 
     # Register the app command group on the bot's command tree
     try:
