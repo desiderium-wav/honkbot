@@ -129,9 +129,11 @@ def get_guild_provocation(guild_id: int) -> float:
     """
     Get aggregate provocation level for a guild.
     Used by decision loop to factor into chaos calculations.
+    
+    Note: Currently returns global max provocation score.
+    TODO: Filter by guild_id once guild tracking is added to provocation system.
     """
     # Simple implementation: return max score across all users with decay applied
-    # Could be enhanced with guild-specific logic
     if not _provocation_scores:
         return 0.0
     
