@@ -179,25 +179,33 @@ def register(bot: commands.Bot) -> None:
         await ctx.reply(_format_lock_status(target))
 
     # Legacy prefix-only alias to preserve the original "echo?" command name.
+    # Keep the prefix alias for backward compatibility, but invoke the existing
+    # echo_status hybrid command so the slash version is the canonical implementation.
     @bot.command(name="echo?")
     async def echo_question_alias(ctx: commands.Context, *, target: Optional[str] = None) -> None:
-        """Legacy prefix-only alias for echo status (keeps `echo?` working)."""
+        """Legacy prefix-only alias for echo status (keeps `echo?` working).
+        Invokes the /echo_status implementation under the hood.
+        """
+        all_users = False
+        member_obj: Optional[discord.Member] = None
+
         if not target:
-            await ctx.reply(_format_lock_status(ctx.author))
-            return
-        if target.lower() == "all":
-            locked = memory.get_all_echolocks()
-            if not locked:
-                await ctx.reply("No users are echolocked.")
+            member_obj = None
+        elif target.lower() == "all":
+            all_users = True
+        else:
+            member_obj = await _resolve_member(ctx, target)
+            if member_obj is None:
+                await ctx.reply("Could not resolve that user.")
                 return
-            mentions = ", ".join(f"<@{user_id}>" for user_id in locked.keys())
-            await ctx.reply(f"Echolocked users: {mentions}")
+
+        cmd = ctx.bot.get_command("echo_status")
+        if cmd is None:
+            target_member = member_obj or ctx.author
+            await ctx.reply(_format_lock_status(target_member))
             return
-        member = await _resolve_member(ctx, target)
-        if not member:
-            await ctx.reply("Could not resolve that user.")
-            return
-        await ctx.reply(_format_lock_status(member))
+
+        await ctx.invoke(cmd, member=member_obj, all_users=all_users)
 
     @bot.listen("on_message")
     async def echolock_listener(message: discord.Message) -> None:
