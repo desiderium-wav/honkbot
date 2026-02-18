@@ -24,6 +24,19 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 import time
 
+# Import persistence functions (lazy to avoid circular deps)
+_persistence_loaded = False
+def _get_persistence():
+    global _persistence_loaded
+    if not _persistence_loaded:
+        try:
+            from state import persistence as _p
+            globals()['_persistence'] = _p
+            _persistence_loaded = True
+        except Exception:
+            pass
+    return globals().get('_persistence')
+
 DEFAULT_TAKEOVER_THRESHOLD = 10
 DEFAULT_RECENT_ACTION_LIMIT = 10
 
@@ -51,11 +64,23 @@ def get_user_honk_count(user_id: int) -> int:
 
 def set_user_honk_count(user_id: int, count: int) -> None:
     _user_honk_counts[user_id] = max(0, count)
+    p = _get_persistence()
+    if p:
+        try:
+            p.save_user_honk_count(user_id, _user_honk_counts[user_id])
+        except Exception:
+            pass
 
 
 def increment_user_honk_count(user_id: int, amount: int = 1) -> int:
     new_value = get_user_honk_count(user_id) + amount
     _user_honk_counts[user_id] = max(0, new_value)
+    p = _get_persistence()
+    if p:
+        try:
+            p.save_user_honk_count(user_id, _user_honk_counts[user_id])
+        except Exception:
+            pass
     return _user_honk_counts[user_id]
 
 
@@ -80,11 +105,23 @@ def get_channel_honk_activity(channel_id: int) -> int:
 
 def set_channel_honk_activity(channel_id: int, count: int) -> None:
     _channel_honk_activity[channel_id] = max(0, count)
+    p = _get_persistence()
+    if p:
+        try:
+            p.save_channel_honk_activity(channel_id, _channel_honk_activity[channel_id])
+        except Exception:
+            pass
 
 
 def increment_channel_honk_activity(channel_id: int, amount: int = 1) -> int:
     new_value = get_channel_honk_activity(channel_id) + amount
     _channel_honk_activity[channel_id] = max(0, new_value)
+    p = _get_persistence()
+    if p:
+        try:
+            p.save_channel_honk_activity(channel_id, _channel_honk_activity[channel_id])
+        except Exception:
+            pass
     return _channel_honk_activity[channel_id]
 
 
@@ -109,10 +146,22 @@ def get_cooldown(key: str, target_id: int) -> Optional[float]:
 
 def set_cooldown(key: str, target_id: int, until_timestamp: float) -> None:
     _cooldowns[(key, target_id)] = until_timestamp
+    p = _get_persistence()
+    if p:
+        try:
+            p.save_cooldown(key, target_id, until_timestamp)
+        except Exception:
+            pass
 
 
 def clear_cooldown(key: str, target_id: int) -> None:
     _cooldowns.pop((key, target_id), None)
+    p = _get_persistence()
+    if p:
+        try:
+            p.clear_cooldown(key, target_id)
+        except Exception:
+            pass
 
 
 def is_on_cooldown(key: str, target_id: int, now: Optional[float] = None) -> bool:
@@ -134,6 +183,12 @@ def get_takeover_threshold(channel_id: int) -> int:
 
 def set_takeover_threshold(channel_id: int, threshold: int) -> None:
     _takeover_thresholds[channel_id] = max(1, threshold)
+    p = _get_persistence()
+    if p:
+        try:
+            p.save_takeover_threshold(channel_id, _takeover_thresholds[channel_id])
+        except Exception:
+            pass
 
 
 def is_takeover_ready(channel_id: int, honk_count: int) -> bool:
@@ -164,6 +219,12 @@ def add_recent_action(
     actions.append(RecentAction(action=action, timestamp=timestamp))
     if limit > 0:
         _recent_actions[user_id] = actions[-limit:]
+    p = _get_persistence()
+    if p:
+        try:
+            p.save_recent_action(user_id, action, timestamp)
+        except Exception:
+            pass
 
 
 def clear_recent_actions(user_id: int) -> None:
@@ -178,11 +239,23 @@ def set_honklock(user_id: int, locked_at: Optional[float] = None) -> float:
     if locked_at is None:
         locked_at = time.time()
     _honklocks[user_id] = locked_at
+    p = _get_persistence()
+    if p:
+        try:
+            p.save_honklock(user_id, locked_at)
+        except Exception:
+            pass
     return locked_at
 
 
 def clear_honklock(user_id: int) -> None:
     _honklocks.pop(user_id, None)
+    p = _get_persistence()
+    if p:
+        try:
+            p.clear_honklock(user_id)
+        except Exception:
+            pass
 
 
 def is_honklocked(user_id: int) -> bool:
@@ -205,11 +278,23 @@ def set_echolock(user_id: int, locked_at: Optional[float] = None) -> float:
     if locked_at is None:
         locked_at = time.time()
     _echo_locks[user_id] = locked_at
+    p = _get_persistence()
+    if p:
+        try:
+            p.save_echolock(user_id, locked_at)
+        except Exception:
+            pass
     return locked_at
 
 
 def clear_echolock(user_id: int) -> None:
     _echo_locks.pop(user_id, None)
+    p = _get_persistence()
+    if p:
+        try:
+            p.clear_echolock(user_id)
+        except Exception:
+            pass
 
 
 def is_echolocked(user_id: int) -> bool:
@@ -256,6 +341,16 @@ def reset_safety_state(guild_id: int) -> None:
     _safety_state.pop(guild_id, None)
 
 
+def persist_safety_state(guild_id: int) -> None:
+    """Helper to persist safety state for a guild."""
+    p = _get_persistence()
+    if p and guild_id in _safety_state:
+        try:
+            p.save_safety_state(guild_id, _safety_state[guild_id])
+        except Exception:
+            pass
+
+
 def reset_all_safety_state() -> None:
     _safety_state.clear()
 
@@ -267,6 +362,12 @@ def get_global_safety_enabled() -> bool:
 def set_global_safety_enabled(enabled: bool) -> None:
     global _global_safety_enabled
     _global_safety_enabled = bool(enabled)
+    p = _get_persistence()
+    if p:
+        try:
+            p.save_global_safety_enabled(_global_safety_enabled)
+        except Exception:
+            pass
 
 
 def reset_all_state() -> None:

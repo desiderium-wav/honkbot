@@ -131,6 +131,14 @@ class LocalMediaProvider(MediaProvider):
 class ServerMediaProvider(MediaProvider):
     _index: Dict[int, Dict[str, List[str]]] = field(default_factory=dict, init=False)
 
+    async def initialize(self) -> None:
+        """Load persisted server media index on startup."""
+        try:
+            from media import provider_persistence
+            self._index = provider_persistence.load_server_media_index()
+        except Exception:
+            pass
+
     async def search(self, query: str, context: Dict[str, object]) -> Optional[MediaItem]:
         return self._pick_from_index(context, query=query)
 
@@ -147,6 +155,13 @@ class ServerMediaProvider(MediaProvider):
                 continue
             items = guild_index.setdefault(key, [])
             items.extend(urls)
+        
+        # Persist to database
+        try:
+            from media import provider_persistence
+            provider_persistence.save_server_media(guild_id, keywords, urls)
+        except Exception:
+            pass
 
     def _pick_from_index(self, context: Dict[str, object], *, query: Optional[str] = None) -> Optional[MediaItem]:
         guild_id = context.get("guild_id")
