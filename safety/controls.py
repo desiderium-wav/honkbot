@@ -78,8 +78,14 @@ def _has_guild_control_ctx(ctx: commands.Context) -> bool:
     return bool(getattr(ctx.author, "guild_permissions", None).administrator)
 
 
-async def _has_guild_control_interaction(interaction: discord.Interaction) -> bool:
-    """Check guild control for app command interactions."""
+def _has_guild_control_interaction(interaction: discord.Interaction) -> bool:
+    """
+    Check guild control for app command interactions WITHOUT awaiting.
+
+    Important: avoid awaiting (e.g., fetch_member) here to prevent interaction timeouts.
+    Use the interaction.user (Member) or guild cache.
+    Returns False if permission cannot be determined quickly.
+    """
     if interaction.guild is None:
         return False
     uid = interaction.user.id
@@ -87,14 +93,19 @@ async def _has_guild_control_interaction(interaction: discord.Interaction) -> bo
         return True
     if interaction.guild.owner_id == uid:
         return True
-    member = interaction.user
-    if isinstance(member, discord.Member) and getattr(member, "guild_permissions", None):
-        return bool(member.guild_permissions.administrator)
-    try:
-        member = await interaction.guild.fetch_member(uid)
-        return bool(member.guild_permissions.administrator)
-    except Exception:
-        return False
+
+    # If interaction.user is a Member with guild_permissions, check that.
+    user = interaction.user
+    if isinstance(user, discord.Member) and getattr(user, "guild_permissions", None):
+        return bool(user.guild_permissions.administrator)
+
+    # Fall back to guild member cache (synchronous). Do NOT await fetch_member here.
+    member = interaction.guild.get_member(uid)
+    if member is not None:
+        return bool(getattr(member, "guild_permissions", None).administrator)
+
+    # Could not determine quickly; deny to avoid delays.
+    return False
 
 
 def get_guild_state(guild: GuildLike) -> Dict[str, object]:
@@ -499,7 +510,7 @@ def register(bot: commands.Bot) -> None:
 
     @safety_app.command(name="enable")
     async def app_safety_enable(interaction: discord.Interaction) -> None:
-        if not await _has_guild_control_interaction(interaction):
+        if not _has_guild_control_interaction(interaction):
             await interaction.response.send_message("You do not have permission to perform this action.", ephemeral=True)
             return
         set_guild_enabled(interaction.guild, True)
@@ -507,7 +518,7 @@ def register(bot: commands.Bot) -> None:
 
     @safety_app.command(name="disable")
     async def app_safety_disable(interaction: discord.Interaction) -> None:
-        if not await _has_guild_control_interaction(interaction):
+        if not _has_guild_control_interaction(interaction):
             await interaction.response.send_message("You do not have permission to perform this action.", ephemeral=True)
             return
         set_guild_enabled(interaction.guild, False)
@@ -527,7 +538,7 @@ def register(bot: commands.Bot) -> None:
     @safety_app.command(name="module")
     async def app_safety_module(interaction: discord.Interaction, module: str, enabled: bool) -> None:
         """Enable/disable a module via slash with a boolean toggle."""
-        if not await _has_guild_control_interaction(interaction):
+        if not _has_guild_control_interaction(interaction):
             await interaction.response.send_message("You do not have permission to perform this action.", ephemeral=True)
             return
         module_key = module.lower()
@@ -542,7 +553,7 @@ def register(bot: commands.Bot) -> None:
 
     @exclude_group.command(name="add")
     async def app_safety_exclude_add(interaction: discord.Interaction, channel: discord.TextChannel) -> None:
-        if not await _has_guild_control_interaction(interaction):
+        if not _has_guild_control_interaction(interaction):
             await interaction.response.send_message("You do not have permission to perform this action.", ephemeral=True)
             return
         add_channel_exclusion(interaction.guild, channel)
@@ -550,7 +561,7 @@ def register(bot: commands.Bot) -> None:
 
     @exclude_group.command(name="remove")
     async def app_safety_exclude_remove(interaction: discord.Interaction, channel: discord.TextChannel) -> None:
-        if not await _has_guild_control_interaction(interaction):
+        if not _has_guild_control_interaction(interaction):
             await interaction.response.send_message("You do not have permission to perform this action.", ephemeral=True)
             return
         remove_channel_exclusion(interaction.guild, channel)
@@ -558,7 +569,7 @@ def register(bot: commands.Bot) -> None:
 
     @exclude_group.command(name="clear")
     async def app_safety_exclude_clear(interaction: discord.Interaction) -> None:
-        if not await _has_guild_control_interaction(interaction):
+        if not _has_guild_control_interaction(interaction):
             await interaction.response.send_message("You do not have permission to perform this action.", ephemeral=True)
             return
         clear_channel_exclusions(interaction.guild)
@@ -576,7 +587,7 @@ def register(bot: commands.Bot) -> None:
         seconds: float,
         channel: Optional[discord.TextChannel] = None,
     ) -> None:
-        if not await _has_guild_control_interaction(interaction):
+        if not _has_guild_control_interaction(interaction):
             await interaction.response.send_message("You do not have permission to perform this action.", ephemeral=True)
             return
         until = set_cooldown(interaction.guild, key, seconds, channel=channel)
@@ -592,7 +603,7 @@ def register(bot: commands.Bot) -> None:
         key: str,
         channel: Optional[discord.TextChannel] = None,
     ) -> None:
-        if not await _has_guild_control_interaction(interaction):
+        if not _has_guild_control_interaction(interaction):
             await interaction.response.send_message("You do not have permission to perform this action.", ephemeral=True)
             return
         clear_cooldown(interaction.guild, key, channel=channel)
