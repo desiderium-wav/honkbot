@@ -111,10 +111,9 @@ def _load_cooldowns() -> None:
     
     # Clean up expired cooldowns
     try:
-        deleted = db_layer.delete_rows("honkbot_cooldowns", {})
-        if deleted > 0:
-            with db_layer.db_cursor() as cursor:
-                cursor.execute("DELETE FROM honkbot_cooldowns WHERE until_timestamp <= :now", {"now": now})
+        with db_layer.db_cursor() as cursor:
+            cursor.execute("DELETE FROM honkbot_cooldowns WHERE until_timestamp <= :now", {"now": now})
+            if cursor.rowcount > 0:
                 logger.debug(f"Cleaned up {cursor.rowcount} expired cooldowns")
     except Exception as e:
         logger.error(f"Error cleaning expired cooldowns: {e}")

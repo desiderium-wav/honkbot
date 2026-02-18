@@ -8,7 +8,7 @@ This module handles persistence for media/providers.py ServerMediaProvider:
 from __future__ import annotations
 
 import logging
-from typing import Dict, Iterable, List
+from typing import Dict, Iterable, List, Optional
 
 import db_layer
 

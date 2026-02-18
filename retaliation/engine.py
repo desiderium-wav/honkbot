@@ -130,10 +130,16 @@ def get_guild_provocation(guild_id: int) -> float:
     Get aggregate provocation level for a guild.
     Used by decision loop to factor into chaos calculations.
     """
-    # Simple implementation: return max score across all users
+    # Simple implementation: return max score across all users with decay applied
     # Could be enhanced with guild-specific logic
     if not _provocation_scores:
         return 0.0
     
-    return max(score for score, _ in _provocation_scores.values())
+    now = datetime.now(timezone.utc)
+    decayed_scores = []
+    for user_id, (score, last_updated) in _provocation_scores.items():
+        decayed_score = scoring.apply_decay(score, last_updated, now)
+        decayed_scores.append(decayed_score)
+    
+    return max(decayed_scores) if decayed_scores else 0.0
 
