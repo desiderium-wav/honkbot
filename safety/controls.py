@@ -12,8 +12,13 @@ Commands:
 
 This module also enforces safety checks used by all systems.
 A global owner-only override is supported.
-"""
 
+Notes:
+- Hybrid commands accept typed options when used as slash commands.
+- Prefix usage remains supported and is now backward-compatible for boolean
+  parameters: strings like "on"/"off", "enable"/"disable", "true"/"false",
+  "1"/"0", "yes"/"no" will be parsed into booleans.
+"""
 from __future__ import annotations
 
 import os
@@ -280,6 +285,34 @@ def safety_allows(
     return True
 
 
+# --- Backward-compatible boolean parsing helper ---
+
+
+def _parse_bool_flag(value) -> Optional[bool]:
+    """
+    Parse a boolean-like value (bool or string) into a bool.
+    Returns None if unable to parse (caller can treat as error).
+    Accepts common textual forms for prefix compatibility.
+    """
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return None
+    # Some command parameter parsing may pass numbers; handle them.
+    if isinstance(value, (int, float)):
+        try:
+            return bool(int(value))
+        except Exception:
+            return None
+    if isinstance(value, str):
+        s = value.strip().lower()
+        if s in {"on", "enable", "enabled", "true", "1", "yes", "y"}:
+            return True
+        if s in {"off", "disable", "disabled", "false", "0", "no", "n"}:
+            return False
+    return None
+
+
 def register(bot: commands.Bot) -> None:
     @commands.hybrid_group(name="safety", invoke_without_command=True)
     @commands.check(_has_guild_control)
@@ -318,19 +351,33 @@ def register(bot: commands.Bot) -> None:
         await ctx.reply("Safety disabled for this server.")
 
     @safety_group.command(name="global")
-    async def safety_global(ctx: commands.Context, enabled: bool) -> None:
-        """Set global safety enabled/disabled. (bot owner only)"""
+    async def safety_global(ctx: commands.Context, enabled: Optional[Union[bool, str]] = None) -> None:
+        """Set global safety enabled/disabled. (bot owner only)
+
+        Backward-compatible: accepts booleans (slash) or strings like "on"/"off" (prefix).
+        """
         if not _is_bot_owner(ctx.author.id):
             await ctx.reply("Only the bot owner can change global safety.")
             return
-        if not set_global_enabled(enabled, actor_id=ctx.author.id):
+
+        parsed = _parse_bool_flag(enabled)
+        if parsed is None:
+            await ctx.reply("Specify enabled as true/false or on/off.", mention_author=False)
+            return
+
+        if not set_global_enabled(parsed, actor_id=ctx.author.id):
             await ctx.reply("Failed to update global safety.")
             return
-        await ctx.reply(f"Global safety {'enabled' if enabled else 'disabled'}.")
+        await ctx.reply(f"Global safety {'enabled' if parsed else 'disabled'}.")
 
     @safety_group.command(name="module")
     @commands.check(_has_guild_control)
-    async def safety_module(ctx: commands.Context, module: str, enabled: bool) -> None:
+    async def safety_module(
+        ctx: commands.Context,
+        module: str,
+        enabled: Optional[Union[bool, str]] = None,
+    ) -> None:
+        """Enable or disable a module. Accepts bool (slash) or on/off (prefix)."""
         if ctx.guild is None:
             await ctx.reply("Safety controls are only available in a server.")
             return
@@ -338,8 +385,14 @@ def register(bot: commands.Bot) -> None:
         if module_key not in SYSTEM_TOGGLES:
             await ctx.reply(f"Unknown module. Valid: {', '.join(SYSTEM_TOGGLES)}")
             return
-        set_module_enabled(ctx.guild, module_key, enabled)
-        await ctx.reply(f"Module {module_key} {'enabled' if enabled else 'disabled'}.")
+
+        parsed = _parse_bool_flag(enabled)
+        if parsed is None:
+            await ctx.reply("Specify enabled as true/false or on/off.", mention_author=False)
+            return
+
+        set_module_enabled(ctx.guild, module_key, parsed)
+        await ctx.reply(f"Module {module_key} {'enabled' if parsed else 'disabled'}.")
 
     @safety_group.group(name="exclude", invoke_without_command=True)
     @commands.check(_has_guild_control)
