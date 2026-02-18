@@ -1,18 +1,19 @@
 """
-Echo — Mocking Message Repetition Commands
+Echo — Mocking Message Repetition Commands (hybrid-friendly)
 
 THIS MODULE DEFINES USER COMMANDS AND HANDLERS.
 
 Commands in this module:
-- echo {user}: Apply Echo to a user
-- unecho {user}: Remove Echo from a user
+- echo {member} [all_users]: Apply Echo to a user or everyone
+- unecho {member} [all_users]: Remove Echo from a user or everyone
+- echo_status {member} [all_users]: Query Echo status (slash-friendly)
+- echo? (legacy prefix-only alias) — preserved for backwards compatibility
 
 Behavior:
 - Replies to user messages by reposting the original message with exaggerated casing
 - Adds randomized mocking commentary and emojis
 - May also trigger media responses via the media system
 
-This module weaponizes user speech without blocking it.
 All commands are registered explicitly via `register(bot)`.
 """
 
@@ -157,7 +158,8 @@ def register(bot: commands.Bot) -> None:
         memory.clear_echolock(member.id)
         await ctx.reply(f"{member.display_name} has been unechoed.")
 
-    @commands.hybrid_command(name="echo?")
+    # Slash-friendly hybrid status command
+    @commands.hybrid_command(name="echo_status")
     async def echo_status_cmd(
         ctx: commands.Context,
         member: Optional[discord.Member] = None,
@@ -175,6 +177,27 @@ def register(bot: commands.Bot) -> None:
 
         target = member or ctx.author
         await ctx.reply(_format_lock_status(target))
+
+    # Legacy prefix-only alias to preserve the original "echo?" command name.
+    @bot.command(name="echo?")
+    async def echo_question_alias(ctx: commands.Context, *, target: Optional[str] = None) -> None:
+        """Legacy prefix-only alias for echo status (keeps `echo?` working)."""
+        if not target:
+            await ctx.reply(_format_lock_status(ctx.author))
+            return
+        if target.lower() == "all":
+            locked = memory.get_all_echolocks()
+            if not locked:
+                await ctx.reply("No users are echolocked.")
+                return
+            mentions = ", ".join(f"<@{user_id}>" for user_id in locked.keys())
+            await ctx.reply(f"Echolocked users: {mentions}")
+            return
+        member = await _resolve_member(ctx, target)
+        if not member:
+            await ctx.reply("Could not resolve that user.")
+            return
+        await ctx.reply(_format_lock_status(member))
 
     @bot.listen("on_message")
     async def echolock_listener(message: discord.Message) -> None:
