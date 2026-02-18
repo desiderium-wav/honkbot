@@ -177,6 +177,14 @@ class ContextAnalyzer:
         self._keyword_counts.clear()
         self.learned_keywords.clear()
         self._last_updated = None
+    
+    def persist_snapshot(self) -> None:
+        """Persist current context snapshot to database."""
+        try:
+            from media import context_persistence
+            context_persistence.persist_context_snapshot(self)
+        except Exception:
+            pass
 
 
 # Shared singleton for convenience; other modules can import this.

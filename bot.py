@@ -93,7 +93,9 @@ async def _initialize_persistence() -> None:
 
 
 async def _start_background_systems(bot: commands.Bot) -> None:
+    from utils import persistence_tasks
     await decision_loop.start(bot)
+    await persistence_tasks.start()
 
 
 def main() -> None:

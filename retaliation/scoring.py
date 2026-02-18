@@ -191,7 +191,6 @@ def _score_repetition(
     """
     Penalize repeated content or repeated mentions in a short window.
     """
-    """
     if not history:
         return 0.0
 
@@ -216,7 +215,6 @@ def _score_escalation(
 ) -> float:
     """
     Detect rapid-fire insults or intensifying language over short intervals.
-    """
     """
     if not history:
         return 0.0
