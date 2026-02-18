@@ -242,7 +242,7 @@ async def _index_server_media(message: discord.Message) -> None:
 
 
 def register(bot: commands.Bot) -> None:
-    @bot.command(name="goose")
+    @commands.hybrid_command(name="goose")
     async def goose_cmd(ctx: commands.Context, *, query: Optional[str] = None) -> None:
         await _ensure_media_initialized()
         context = _build_context_for_message(ctx.message)
@@ -250,7 +250,7 @@ def register(bot: commands.Bot) -> None:
         if not success:
             await ctx.reply("No goose media found.", mention_author=False)
 
-    @bot.command(name="goosecontext")
+    @commands.hybrid_command(name="goosecontext")
     async def goose_context_cmd(ctx: commands.Context) -> None:
         await _ensure_media_initialized()
         query = _context_query_from_snapshot()
