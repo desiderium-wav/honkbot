@@ -102,65 +102,69 @@ async def _emit_echo(message: discord.Message, content: str) -> None:
 
 
 def register(bot: commands.Bot) -> None:
-    @bot.command(name="echo")
+    @commands.hybrid_command(name="echo")
     @commands.has_permissions(administrator=True)
-    async def echo_cmd(ctx: commands.Context, *, target: Optional[str] = None) -> None:
-        if not target:
-            await ctx.reply("Specify a user or `all`.")
-            return
-
-        if target.lower() == "all":
+    async def echo_cmd(
+        ctx: commands.Context,
+        member: Optional[discord.Member] = None,
+        all_users: bool = False,
+    ) -> None:
+        """Echolock a member, or all members with the all_users flag."""
+        if all_users:
             if not ctx.guild:
                 await ctx.reply("This command requires a server context.")
                 return
             count = 0
-            for member in ctx.guild.members:
-                if member.bot:
+            for m in ctx.guild.members:
+                if m.bot:
                     continue
-                if not memory.is_echolocked(member.id):
-                    memory.set_echolock(member.id)
+                if not memory.is_echolocked(m.id):
+                    memory.set_echolock(m.id)
                     count += 1
             await ctx.reply(f"Echolocked {count} users.")
             return
 
-        member = await _resolve_member(ctx, target)
-        if not member:
-            await ctx.reply("Could not resolve that user.")
+        if member is None:
+            await ctx.reply("Specify a user or use the `all_users` flag.")
             return
+
         if memory.is_echolocked(member.id):
             await ctx.reply(f"{member.display_name} is already echolocked.")
             return
         memory.set_echolock(member.id)
         await ctx.reply(f"{member.display_name} is now echolocked.")
 
-    @bot.command(name="unecho")
+    @commands.hybrid_command(name="unecho")
     @commands.has_permissions(administrator=True)
-    async def unecho_cmd(ctx: commands.Context, *, target: Optional[str] = None) -> None:
-        if not target:
-            await ctx.reply("Specify a user or `all`.")
-            return
-
-        if target.lower() == "all":
+    async def unecho_cmd(
+        ctx: commands.Context,
+        member: Optional[discord.Member] = None,
+        all_users: bool = False,
+    ) -> None:
+        """Remove echolock from a member or all members."""
+        if all_users:
             memory.reset_all_echolocks()
             await ctx.reply("All echolocks removed.")
             return
 
-        member = await _resolve_member(ctx, target)
-        if not member:
-            await ctx.reply("Could not resolve that user.")
+        if member is None:
+            await ctx.reply("Specify a user or use the `all_users` flag.")
             return
+
         if not memory.is_echolocked(member.id):
             await ctx.reply(f"{member.display_name} is not echolocked.")
             return
         memory.clear_echolock(member.id)
         await ctx.reply(f"{member.display_name} has been unechoed.")
 
-    @bot.command(name="echo?")
-    async def echo_status_cmd(ctx: commands.Context, *, target: Optional[str] = None) -> None:
-        if not target:
-            await ctx.reply(_format_lock_status(ctx.author))
-            return
-        if target.lower() == "all":
+    @commands.hybrid_command(name="echo?")
+    async def echo_status_cmd(
+        ctx: commands.Context,
+        member: Optional[discord.Member] = None,
+        all_users: bool = False,
+    ) -> None:
+        """Query echolock status for a member or list all echolocked users."""
+        if all_users:
             locked = memory.get_all_echolocks()
             if not locked:
                 await ctx.reply("No users are echolocked.")
@@ -168,11 +172,9 @@ def register(bot: commands.Bot) -> None:
             mentions = ", ".join(f"<@{user_id}>" for user_id in locked.keys())
             await ctx.reply(f"Echolocked users: {mentions}")
             return
-        member = await _resolve_member(ctx, target)
-        if not member:
-            await ctx.reply("Could not resolve that user.")
-            return
-        await ctx.reply(_format_lock_status(member))
+
+        target = member or ctx.author
+        await ctx.reply(_format_lock_status(target))
 
     @bot.listen("on_message")
     async def echolock_listener(message: discord.Message) -> None:
