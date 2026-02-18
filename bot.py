@@ -9,6 +9,7 @@ Responsibilities of this file ONLY:
 - Import all system modules
 - Explicitly register command suites from modules
 - Start autonomous/background systems
+- Initialize database schema and load persisted state
 - Start the bot
 
 IMPORTANT ARCHITECTURE RULES:
@@ -63,6 +64,34 @@ def _register_modules(bot: commands.Bot) -> None:
     echolock.register(bot)
 
 
+async def _initialize_persistence() -> None:
+    """Initialize database schema and load persisted state."""
+    try:
+        import db_layer
+        from state import persistence as state_persistence
+        from media import context_persistence
+        from media.context import context_analyzer
+        from retaliation import engine as retaliation_engine
+        
+        # Initialize schema
+        logger.info("Initializing database schema...")
+        db_layer.initialize_schema()
+        
+        # Load persisted state
+        logger.info("Loading persisted state...")
+        state_persistence.load_all_state()
+        
+        logger.info("Loading context state...")
+        context_persistence.load_context_state(context_analyzer)
+        
+        logger.info("Initializing retaliation engine...")
+        retaliation_engine.initialize()
+        
+        logger.info("Persistence initialization complete")
+    except Exception as e:
+        logger.error(f"Error initializing persistence: {e}", exc_info=True)
+
+
 async def _start_background_systems(bot: commands.Bot) -> None:
     await decision_loop.start(bot)
 
@@ -85,6 +114,9 @@ def main() -> None:
         if db_conn is None:
             db_conn = get_connection()
             logger.info("Connected to the database.")
+        
+        # Initialize persistence
+        await _initialize_persistence()
             
         logger.info("HonkBot connected as %s", bot.user)
         await _start_background_systems(bot)

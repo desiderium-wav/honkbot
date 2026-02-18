@@ -96,6 +96,13 @@ class ContextAnalyzer:
             self._decrement_keywords(removed.content)
 
         self._increment_keywords(content)
+        
+        # Persist message to database
+        try:
+            from media import context_persistence
+            context_persistence.save_message(author, content, timestamp)
+        except Exception:
+            pass
 
     def _tokenize(self, text: str) -> Iterable[str]:
         for raw in text.lower().split():
