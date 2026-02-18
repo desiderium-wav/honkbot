@@ -155,29 +155,37 @@ def register(bot: commands.Bot) -> None:
         await ctx.reply(_format_lock_status(target))
 
     # Legacy prefix-only alias to preserve the original "honk?" command name.
-    # This keeps compatibility for users who invoke "honk?" via prefix.
+    # Keep the prefix alias for backward compatibility, but invoke the existing
+    # honk_status hybrid command so the slash version is the canonical implementation.
     @bot.command(name="honk?")
     async def honk_question_alias(ctx: commands.Context, *, target: Optional[str] = None) -> None:
-        """Legacy prefix-only alias for honk status (keeps `honk?` working)."""
-        # If no target provided, show invoker status
+        """Legacy prefix-only alias for honk status (keeps `honk?` working).
+        Invokes the /honk_status implementation under the hood.
+        """
+        # Decide parameters to pass to honk_status
+        all_users = False
+        member_obj: Optional[discord.Member] = None
+
         if not target:
-            await ctx.reply(_format_lock_status(ctx.author))
-            return
-
-        if target.lower() == "all":
-            locked = memory.get_all_honklocks()
-            if not locked:
-                await ctx.reply("No users are honklocked.")
+            # no args -> show invoker status
+            member_obj = None
+        elif target.lower() == "all":
+            all_users = True
+        else:
+            member_obj = await _resolve_member(ctx, target)
+            if member_obj is None:
+                await ctx.reply("Could not resolve that user.")
                 return
-            mentions = ", ".join(f"<@{user_id}>" for user_id in locked.keys())
-            await ctx.reply(f"Honklocked users: {mentions}")
+
+        cmd = ctx.bot.get_command("honk_status")
+        if cmd is None:
+            # Fallback: duplicate behavior if honk_status isn't registered for some reason
+            target_member = member_obj or ctx.author
+            await ctx.reply(_format_lock_status(target_member))
             return
 
-        member = await _resolve_member(ctx, target)
-        if not member:
-            await ctx.reply("Could not resolve that user.")
-            return
-        await ctx.reply(_format_lock_status(member))
+        # Invoke the hybrid command's callback
+        await ctx.invoke(cmd, member=member_obj, all_users=all_users)
 
     # Listener to apply honkify for honklocked users
     @bot.listen("on_message")
