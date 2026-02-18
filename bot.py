@@ -114,12 +114,19 @@ def main() -> None:
     async def on_ready() -> None:
         global db_conn
 
+        # Attempt to obtain a DB connection (may return None if not configured)
         if db_conn is None:
             db_conn = get_connection()
-            logger.info("Connected to the database.")
-        
-        # Initialize persistence
-        await _initialize_persistence()
+            if db_conn:
+                logger.info("Connected to the database.")
+            else:
+                logger.info("Database connection not configured or unavailable; persistence initialization will be skipped.")
+
+        # Only initialize persistence if we have a DB connection
+        if db_conn:
+            await _initialize_persistence()
+        else:
+            logger.info("Skipping persistence initialization due to missing DB connection.")
             
         logger.info("HonkBot connected as %s", bot.user)
         await _start_background_systems(bot)
